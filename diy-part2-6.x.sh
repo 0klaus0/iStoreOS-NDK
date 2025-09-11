@@ -1,42 +1,38 @@
 #!/bin/bash
 #===============================================
-# Description: DIY script
-# File name: diy-script.sh
+# Description: DIY script for RK3566-JianPian
+# File name: diy-part2-rk3566.sh
 # Lisence: MIT
-# Author: P3TERX
-# Blog: https://p3terx.com
+# Author: P3TERX (modified by 0klaus0)
 #===============================================
 
-# 追加binder内核参数
-#echo "CONFIG_PSI=y
-#CONFIG_KPROBES=y" >> target/linux/rockchip/armv8/config-6.6
+# 1. 可選：內核配置微調（目前 6.x 已內建 SATA/USB3/LED 驅動，如無特殊需求保持註解）
+# echo "CONFIG_PSI=y
+# CONFIG_KPROBES=y" >> target/linux/rockchip/armv8/config-6.6
 
-# 集成无线
-mkdir -p package/base-files/files/lib/firmware/brcm/
-cp -a $GITHUB_WORKSPACE/configfiles/firmware/brcm/* package/base-files/files/lib/firmware/brcm/
+# 2. 把 DTS/DTSI 拷進內核樹（patch 已打，這裡只是雙保險，可省略）
+# cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3566/*.dts* \
+#        target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/
 
-# 增加tv设备
-echo -e "\\ndefine Device/tvi_tvi3315a
-  DEVICE_VENDOR := Tvi
-  DEVICE_MODEL := TVI3315A
-  SOC := rk3399
-  UBOOT_DEVICE_NAME := tvi3315a-rk3399
+# 3. 在 image/armv8.mk 追加我們的盒子定義
+cat <<EOF >> target/linux/rockchip/image/armv8.mk
+
+define Device/jianpian_rk3566-tvbox
+  DEVICE_VENDOR := JianPian
+  DEVICE_MODEL := RK3566-TVBOX
+  SOC := rk3566
+  UBOOT_DEVICE_NAME := jianpian-rk3566
 endef
-TARGET_DEVICES += tvi_tvi3315a" >> target/linux/rockchip/image/armv8.mk
+TARGET_DEVICES += jianpian_rk3566-tvbox
+EOF
 
-# 替换package/boot/uboot-rockchip/Makefile
-cp -f $GITHUB_WORKSPACE/configfiles/uboot-rockchip/Makefile package/boot/uboot-rockchip/Makefile
+# 4. 如果自帶了自訂 U-Boot 配置（可選）
+# cp -f $GITHUB_WORKSPACE/configfiles/uboot-rockchip/Makefile \
+#       package/boot/uboot-rockchip/Makefile
+# cp -f $GITHUB_WORKSPACE/configfiles/uboot-rockchip/jianpian-rk3566_defconfig \
+#       package/boot/uboot-rockchip/src/configs/
+# cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3566/*.dts* \
+#       package/boot/uboot-rockchip/src/arch/arm/dts/
 
-# 复制dts与配置文件到package/boot/uboot-rockchip
-cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3399/{rk3399.dtsi,rk3399-opp.dtsi,rk3399-tvi3315a.dts} package/boot/uboot-rockchip/src/arch/arm/dts/
-cp -f $GITHUB_WORKSPACE/configfiles/uboot-rockchip/rk3399-tvi3315a-u-boot.dtsi package/boot/uboot-rockchip/src/arch/arm/dts/
-cp -f $GITHUB_WORKSPACE/configfiles/uboot-rockchip/tvi3315a-rk3399_defconfig package/boot/uboot-rockchip/src/configs/
-
-# 复制dts到files/arch/arm64/boot/dts/rockchip
-cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3399/{rk3399.dtsi,rk3399-opp.dtsi,rk3399-tvi3315a.dts} target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/
-
-# 添加dtb补丁到target/linux/rockchip/patches-6.6
-cp -f $GITHUB_WORKSPACE/configfiles/patch/800-add-rk3399-tvi3315a-dtb-to-makefile.patch target/linux/rockchip/patches-6.6/
-
-# 定时限速插件
-#git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-app-eqosplus
+# 5. 限速插件（可選，需要的話打開）
+# git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-app-eqosplus
