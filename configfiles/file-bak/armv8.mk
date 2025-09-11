@@ -274,6 +274,15 @@ define Device/radxa_zero-3w
 endef
 TARGET_DEVICES += radxa_zero-3w
 
+define Device/jianpian_rk3566-tvbox
+  DEVICE_VENDOR := JianPian
+  DEVICE_MODEL := RK3566-TVBOX
+  SOC := rk3566
+  UBOOT_DEVICE_NAME := rk3566
+  DEVICE_PACKAGES := kmod-ata-ahci-platform kmod-usb3 kmod-usb2 kmod-usb-storage-uas kmod-r8169
+endef
+TARGET_DEVICES += jianpian_rk3566-tvbox
+
 define Device/sinovoip_bpi-r2-pro
   DEVICE_VENDOR := Sinovoip
   DEVICE_MODEL := Bananapi-R2 Pro
