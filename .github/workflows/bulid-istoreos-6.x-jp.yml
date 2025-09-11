@@ -1,1 +1,143 @@
+name: Build iStoreOS 6.x for RK3566-JianPian
 
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '40 15 * * 3'
+
+env:
+  REPO_URL: https://github.com/istoreos/istoreos
+  REPO_BRANCH: istoreos-24.10          # 官方 RK3566 稳定分支
+  FEEDS_CONF: feeds.conf
+  CONFIG_FILE: rk3566-jianpian.config  # 种子配置（仓库根目录）
+  DIY_P1_SH: diy-part1-rk3566.sh       # 可选：feed 源
+  DIY_P2_SH: diy-part2-rk3566.sh       # 打补丁、改内核
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+  GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        swap-size-mb: 1024
+        temp-reserve-mb: 100
+        root-reserve-mb: 1024
+
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Create workdir
+      run: |
+        mkdir -p $GITHUB_WORKSPACE/workdir
+        chmod 755 $GITHUB_WORKSPACE/workdir
+
+    - name: Print server info
+      run: |
+        echo "CPU:$(nproc)  Memory:$(free -g | awk '/^Mem:/{print $2}')G"
+        df -h
+
+    - name: Install deps
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /etc/mysql /etc/php /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com/P3TERX/Actions-OpenWrt/main/depends-22.04.txt)
+        sudo pip3 install pyelftools
+        sudo apt-get -qq clean
+
+    - name: Clone source
+      working-directory: ${{ env.GITHUB_WORKSPACE }}/workdir
+      run: |
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf $GITHUB_WORKSPACE/workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Cache & ccache
+      uses: klever1988/cachewrtbuild@main
+      with:
+        ccache: 'true'
+        mixkey: rk3566-${{ hashFiles('**/patches-rk3566/*.patch') }}
+        prefix: ${{ github.workspace }}/openwrt
+
+    - name: Load feeds.conf
+      run: |
+        [ -e feeds.conf ] && mv feeds.conf openwrt/
+        chmod +x $DIY_P1_SH && cd openwrt && $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: Update & install feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Apply configs & patches
+      run: |
+        [ -e files ] && mv files openwrt/
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: Download
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile
+      id: compile
+      run: |
+        cd openwrt
+        echo "Using $(nproc) threads"
+        make -j$(nproc) || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Organize firmware
+      if: success() && env.UPLOAD_FIRMWARE == 'true'
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@main
+      if: success() && env.UPLOAD_FIRMWARE == 'true'
+      with:
+        name: iStoreOS-RK3566-JianPian-${{ github.run_number }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate release tag
+      if: success() && env.UPLOAD_RELEASE == 'true'
+      id: tag
+      run: |
+        echo "release_tag=$(date +%Y.%m.%d-%H%M)-RK3566" >> $GITHUB_OUTPUT
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload to Releases
+      uses: softprops/action-gh-release@v1
+      if: steps.tag.outputs.status == 'success'
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        files: ${{ env.FIRMWARE }}/*jianpian*-squashfs-sysupgrade.img.gz
+        name: iStoreOS 6.x for RK3566 JianPian ${{ steps.tag.outputs.release_tag }}
+        body: |
+          - SoC: RK3566  
+          - Features: SATA + USB3 + USB2 + GbE + LED  
+          - Compiled: ${{ github.run_number }}  
+        token: ${{ secrets.GH_TOKEN }}
+
+    - name: Clean old releases
+      uses: dev-drprasad/delete-older-releases@v0.3.3
+      if: env.UPLOAD_RELEASE == 'true'
+      with:
+        keep_latest: 10
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
