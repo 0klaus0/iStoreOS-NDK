@@ -36,3 +36,6 @@ EOF
 
 # 5. 限速插件（可選，需要的話打開）
 # git clone --depth=1 https://github.com/sirpdboy/luci-app-eqosplus package/luci-app-eqosplus
+# 避免因 aic8800 驅動編譯失敗中斷整體固件
+sed -i '/CONFIG_PACKAGE.*aic8800/d' .config
+echo '# CONFIG_PACKAGE_kmod-aic8800-usb is not set' >> .config
