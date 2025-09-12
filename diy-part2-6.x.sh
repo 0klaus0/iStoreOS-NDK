@@ -11,8 +11,8 @@
 # CONFIG_KPROBES=y" >> target/linux/rockchip/armv8/config-6.6
 
 # 2. 把 DTS/DTSI 拷進內核樹（patch 已打，這裡只是雙保險，可省略）
-# cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3568/*.dts* \
-#        target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/
+cp -f $GITHUB_WORKSPACE/configfiles/dts/rk3568/*.dts* \
+       target/linux/rockchip/files/arch/arm64/boot/dts/rockchip/
 
 # 3. 在 image/armv8.mk 追加我們的盒子定義
 cat <<EOF >> target/linux/rockchip/image/armv8.mk
